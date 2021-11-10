@@ -20,11 +20,10 @@ import logging
 import re
 import sys
 from concurrent.futures import Future, ThreadPoolExecutor
-from multiprocessing.pool import ThreadPool
 from threading import Event
 from typing import Any, Callable, List, Optional, TypeVar
 
-from pygls import IS_WIN
+from pygls import IS_WIN, IS_PYODIDE
 from pygls.lsp.types import (ApplyWorkspaceEditResponse, ClientCapabilities, ConfigCallbackType,
                              ConfigurationParams, Diagnostic, MessageType, RegistrationParams,
                              ServerCapabilities, TextDocumentSyncKind, UnregistrationParams,
@@ -33,6 +32,10 @@ from pygls.lsp.types.window import ShowDocumentCallbackType, ShowDocumentParams
 from pygls.progress import Progress
 from pygls.protocol import LanguageServerProtocol, deserialize_message
 from pygls.workspace import Workspace
+
+if not IS_PYODIDE:
+    from multiprocessing.pool import ThreadPool
+
 
 logger = logging.getLogger(__name__)
 
@@ -159,13 +162,14 @@ class Server:
 
         if IS_WIN:
             asyncio.set_event_loop(asyncio.ProactorEventLoop())
-        else:
+        elif not IS_PYODIDE:
             asyncio.set_event_loop(asyncio.SelectorEventLoop())
 
         self.loop = loop or asyncio.get_event_loop()
 
         try:
-            asyncio.get_child_watcher().attach_loop(self.loop)
+            if not IS_PYODIDE:
+                asyncio.get_child_watcher().attach_loop(self.loop)
         except NotImplementedError:
             pass
 
@@ -263,7 +267,7 @@ class Server:
             self.shutdown()
 
     @property
-    def thread_pool(self) -> ThreadPool:
+    def thread_pool(self) -> "ThreadPool":
         """Returns thread pool instance (lazy initialization)."""
         if not self._thread_pool:
             self._thread_pool = ThreadPool(processes=self._max_workers)
